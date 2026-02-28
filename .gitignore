@@ -21,3 +21,12 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Android Studio / IntelliJ
+.idea/
+android/.idea/
+*.iml
+
+# Android build
+android/build/
+android/.gradle/
