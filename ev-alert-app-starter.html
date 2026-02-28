@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Charge Alert UK</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #dbeafe 0%, #d1fae5 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 32px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #16a34a;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #15803d;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+        }
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            display: block;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            display: block;
+        }
+        .info {
+            background: #dbeafe;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ EV Charge Alert</h1>
+        <p class="subtitle">Report a blocked charging station</p>
+
+        <form id="reportForm">
+            <div class="form-group">
+                <label>Upload Photo of License Plate</label>
+                <input type="file" id="imageFile" accept="image/*" capture="environment" required>
+            </div>
+
+            <div class="form-group">
+                <label>Charger ID</label>
+                <input type="text" id="chargerId" placeholder="e.g., CHG-001" required>
+            </div>
+
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" id="location" placeholder="e.g., Tesco Extra, High Street" required>
+            </div>
+
+            <button type="submit">📸 Report Blocked Charger</button>
+        </form>
+
+        <div id="status" class="status"></div>
+
+        <div class="info">
+            <strong>ℹ️ How it works:</strong><br>
+            1. Take a photo of the blocking vehicle's license plate<br>
+            2. Enter the charger location<br>
+            3. We'll notify the vehicle owner to move
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script>
+       // Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAuUjDPCCyU3m_5PNX45s2xE-6KSSNJBqM",
+  authDomain: "ev-alert-web.firebaseapp.com",
+  projectId: "ev-alert-web",
+  storageBucket: "ev-alert-web.firebasestorage.app",
+  messagingSenderId: "1046302695642",
+  appId: "1:1046302695642:web:e9f9b75d7126a7e26d05e3"
+};
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const storage = firebase.storage();
+        const db = firebase.firestore();
+
+        // Form submission
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status';
+            statusDiv.textContent = '⏳ Uploading image...';
+            statusDiv.style.display = 'block';
+
+            try {
+                // Get form data
+                const imageFile = document.getElementById('imageFile').files[0];
+                const chargerId = document.getElementById('chargerId').value;
+                const location = document.getElementById('location').value;
+
+                // Upload image to Firebase Storage
+                const timestamp = Date.now();
+                const storageRef = storage.ref(`charger-reports/${timestamp}-${imageFile.name}`);
+                const uploadTask = await storageRef.put(imageFile);
+
+                // Get gs:// URL
+                const gsUrl = `gs://${uploadTask.ref.bucket}/${uploadTask.ref.fullPath}`;
+
+                statusDiv.textContent = '📝 Creating report...';
+
+                // Create Firestore document (this triggers your Cloud Function!)
+                await db.collection('chargerUsage').add({
+                    imageUrl: gsUrl,
+                    chargerId: chargerId,
+                    location: location,
+                    reportedBy: 'web_user',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Success!
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✅ Report submitted! The vehicle owner will be notified.';
+
+                // Reset form
+                document.getElementById('reportForm').reset();
+
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
